@@ -6359,7 +6359,7 @@ func (s *standaloneActivityTestSuite) TestPauseActivityExecution() {
 		}
 	})
 
-	t.Run("PauseIdempotent", func(t *testing.T) {
+	t.Run("PauseWhilePaused", func(t *testing.T) {
 		ctx := testcore.NewContext()
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
@@ -6377,9 +6377,10 @@ func (s *standaloneActivityTestSuite) TestPauseActivityExecution() {
 		_, err := s.FrontendClient().PauseActivityExecution(ctx, pauseReq)
 		require.NoError(t, err)
 
-		// Second pause should succeed with no error (idempotent).
+		// Second pause should fail with FailedPrecondition (activity is already paused).
 		_, err = s.FrontendClient().PauseActivityExecution(ctx, pauseReq)
-		require.NoError(t, err)
+		var failedPreconditionErr *serviceerror.FailedPrecondition
+		require.ErrorAs(t, err, &failedPreconditionErr)
 	})
 
 	t.Run("PauseNotFound", func(t *testing.T) {
