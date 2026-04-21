@@ -11,6 +11,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -21,6 +22,7 @@ type (
 		metricsHandler    metrics.Handler
 		logger            log.SnTaggedLogger
 		namespaceRegistry namespace.Registry
+		chasmRegistry     *chasm.Registry
 		enqueueMutex      sync.Map // map[persistence.QueueKey]*sync.Mutex for per-queue locking
 	}
 	// QueueWriter is a subset of persistence.HistoryTaskQueueManager.
@@ -47,12 +49,14 @@ func NewDLQWriter(
 	h metrics.Handler,
 	l log.SnTaggedLogger,
 	r namespace.Registry,
+	cr *chasm.Registry,
 ) *DLQWriter {
 	return &DLQWriter{
 		dlqWriter:         w,
 		metricsHandler:    h,
 		logger:            l,
 		namespaceRegistry: r,
+		chasmRegistry:     cr,
 	}
 }
 
@@ -106,6 +110,7 @@ func (q *DLQWriter) WriteTaskToDLQ(
 		1,
 		metrics.TaskCategoryTag(task.GetCategory().Name()),
 		metrics.NamespaceStateTag(namespaceState),
+		getArchetypeTag(task, q.chasmRegistry),
 	)
 	ns, err := q.namespaceRegistry.GetNamespaceByID(namespace.ID(task.GetNamespaceID()))
 	var namespaceTag tag.Tag

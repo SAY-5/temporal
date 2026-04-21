@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/queues/queuestest"
 	"go.temporal.io/server/service/history/tasks"
@@ -54,7 +55,7 @@ func TestDLQWriter_ErrGetNamespaceName(t *testing.T) {
 	logger := &logRecorder{SnTaggedLogger: log.NewTestLogger()}
 	metricsHandler := metricstest.NewCaptureHandler()
 	capture := metricsHandler.StartCapture()
-	writer := queues.NewDLQWriter(queueWriter, metricsHandler, logger, namespaceRegistry)
+	writer := queues.NewDLQWriter(queueWriter, metricsHandler, logger, namespaceRegistry, chasm.NewRegistry(log.NewTestLogger()))
 	task := &tasks.WorkflowTask{
 		WorkflowKey: definition.WorkflowKey{
 			NamespaceID: string(tests.NamespaceID),
@@ -85,10 +86,11 @@ func TestDLQWriter_ErrGetNamespaceName(t *testing.T) {
 	counter, ok := recordings[0].Value.(int64)
 	assert.True(t, ok)
 	assert.Equal(t, int64(1), counter)
-	assert.Len(t, recordings[0].Tags, 2)
+	assert.Len(t, recordings[0].Tags, 3)
 	assert.Equal(t, "transfer", recordings[0].Tags[metrics.TaskCategoryTagName])
 	namespaceStateTag := metrics.NamespaceStateTag(metrics.ActiveNamespaceStateTagValue)
 	assert.Equal(t, metrics.ActiveNamespaceStateTagValue, recordings[0].Tags[namespaceStateTag.Key])
+	assert.Equal(t, chasm.WorkflowComponentName, recordings[0].Tags[metrics.ArchetypeTagName])
 }
 
 func TestDLQWriter_Ok(t *testing.T) {
@@ -101,7 +103,7 @@ func TestDLQWriter_Ok(t *testing.T) {
 	logger := &logRecorder{SnTaggedLogger: log.NewTestLogger()}
 	metricsHandler := metricstest.NewCaptureHandler()
 	capture := metricsHandler.StartCapture()
-	writer := queues.NewDLQWriter(queueWriter, metricsHandler, logger, namespaceRegistry)
+	writer := queues.NewDLQWriter(queueWriter, metricsHandler, logger, namespaceRegistry, chasm.NewRegistry(log.NewTestLogger()))
 	task := &tasks.WorkflowTask{
 		WorkflowKey: definition.WorkflowKey{
 			NamespaceID: string(tests.NamespaceID),
@@ -131,10 +133,11 @@ func TestDLQWriter_Ok(t *testing.T) {
 	counter, ok := recordings[0].Value.(int64)
 	assert.True(t, ok)
 	assert.Equal(t, int64(1), counter)
-	assert.Len(t, recordings[0].Tags, 2)
+	assert.Len(t, recordings[0].Tags, 3)
 	assert.Equal(t, "transfer", recordings[0].Tags[metrics.TaskCategoryTagName])
 	namespaceStateTag := metrics.NamespaceStateTag("active")
 	assert.Equal(t, "active", recordings[0].Tags[namespaceStateTag.Key])
+	assert.Equal(t, chasm.WorkflowComponentName, recordings[0].Tags[metrics.ArchetypeTagName])
 }
 
 func TestDLQWriter_ConcurrentWrites(t *testing.T) {
@@ -148,7 +151,7 @@ func TestDLQWriter_ConcurrentWrites(t *testing.T) {
 	namespaceRegistry.EXPECT().GetNamespaceByID(gomock.Any()).Return(&namespace.Namespace{}, nil).AnyTimes()
 	logger := &logRecorder{SnTaggedLogger: log.NewTestLogger()}
 	metricsHandler := metricstest.NewCaptureHandler()
-	writer := queues.NewDLQWriter(queueWriter, metricsHandler, logger, namespaceRegistry)
+	writer := queues.NewDLQWriter(queueWriter, metricsHandler, logger, namespaceRegistry, chasm.NewRegistry(log.NewTestLogger()))
 
 	const numConcurrentWrites = 50
 	var g errgroup.Group
@@ -227,7 +230,7 @@ func TestDLQWriter_ConcurrentWritesDifferentQueues(t *testing.T) {
 	namespaceRegistry.EXPECT().GetNamespaceByID(gomock.Any()).Return(&namespace.Namespace{}, nil).AnyTimes()
 	logger := &logRecorder{SnTaggedLogger: log.NewTestLogger()}
 	metricsHandler := metricstest.NewCaptureHandler()
-	writer := queues.NewDLQWriter(queueWriter, metricsHandler, logger, namespaceRegistry)
+	writer := queues.NewDLQWriter(queueWriter, metricsHandler, logger, namespaceRegistry, chasm.NewRegistry(log.NewTestLogger()))
 
 	const numConcurrentWrites = 50
 	const numQueues = 5

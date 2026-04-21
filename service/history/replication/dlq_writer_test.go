@@ -15,6 +15,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/queues/queuestest"
 	"go.temporal.io/server/service/history/replication"
@@ -78,7 +79,7 @@ func TestNewDLQWriterAdapter(t *testing.T) {
 			metricsHandler := metricstest.NewCaptureHandler()
 			capture := metricsHandler.StartCapture()
 			writer := replication.NewDLQWriterAdapter(
-				queues.NewDLQWriter(queueWriter, metricsHandler, log.NewTestLogger(), namespaceRegistry),
+				queues.NewDLQWriter(queueWriter, metricsHandler, log.NewTestLogger(), namespaceRegistry, chasm.NewRegistry(log.NewTestLogger())),
 				taskSerializer,
 				"test-current-cluster",
 			)
@@ -112,10 +113,11 @@ func TestNewDLQWriterAdapter(t *testing.T) {
 				snapshot := capture.Snapshot()
 				recordings := snapshot[metrics.DLQWrites.Name()]
 				assert.Len(t, recordings, 1)
-				assert.Len(t, recordings[0].Tags, 2)
+				assert.Len(t, recordings[0].Tags, 3)
 				assert.Equal(t, "replication", recordings[0].Tags[metrics.TaskCategoryTagName])
 				namespaceStateTag := metrics.NamespaceStateTag(metrics.PassiveNamespaceStateTagValue)
 				assert.Equal(t, metrics.PassiveNamespaceStateTagValue, recordings[0].Tags[namespaceStateTag.Key])
+				assert.Equal(t, chasm.WorkflowComponentName, recordings[0].Tags[metrics.ArchetypeTagName])
 			}
 		})
 	}
