@@ -266,7 +266,7 @@ func (h *frontendHandler) DeleteActivityExecution(
 		return nil, ErrStandaloneActivityDisabled
 	}
 
-	if err := validateAndNormalizeDeleteRequest(req, h.config.MaxIDLengthLimit()); err != nil {
+	if err := validateDeleteActivityExecutionRequest(req, h.config.MaxIDLengthLimit()); err != nil {
 		return nil, err
 	}
 
@@ -301,7 +301,7 @@ func (h *frontendHandler) TerminateActivityExecution(
 		return nil, err
 	}
 
-	if err := validateAndNormalizeTerminateRequest(
+	if err := validateTerminateActivityExecutionRequest(
 		req,
 		h.config.MaxIDLengthLimit(),
 		h.config.BlobSizeLimitError,
@@ -334,7 +334,7 @@ func (h *frontendHandler) RequestCancelActivityExecution(
 		return nil, err
 	}
 
-	if err := validateAndNormalizeCancelRequest(
+	if err := validateRequestCancelActivityExecutionRequest(
 		req,
 		h.config.MaxIDLengthLimit(),
 		h.config.BlobSizeLimitError,

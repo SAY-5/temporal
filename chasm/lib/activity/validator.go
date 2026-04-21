@@ -58,10 +58,9 @@ func ValidateAndNormalizeEmbeddedActivity(
 	options *activitypb.ActivityOptions,
 	priority *commonpb.Priority,
 	runTimeout *durationpb.Duration,
+	workflowTaskQueueName string,
 ) error {
-	// We cannot use NormalizeAndValidateUserDefined for embedded activity task queue because embedded activities can
-	// use reserved task queues, which are not considered user defined.
-	if err := tqid.NormalizeAndValidate(options.TaskQueue, "", maxIDLengthLimit); err != nil {
+	if err := tqid.NormalizeAndValidateUserDefined(options.TaskQueue, "", workflowTaskQueueName, maxIDLengthLimit); err != nil {
 		return err
 	}
 
@@ -270,6 +269,49 @@ func validateAndNormalizeSearchAttributes(
 	}
 
 	return saValidator.ValidateSize(saToValidate, namespaceName)
+}
+
+func validateAndNormalizeStartRequest(
+	req *workflowservice.StartActivityExecutionRequest,
+	maxIDLengthLimit int,
+	blobSizeLimitError dynamicconfig.IntPropertyFnWithNamespaceFilter,
+	blobSizeLimitWarn dynamicconfig.IntPropertyFnWithNamespaceFilter,
+	logger log.Logger,
+	saMapperProvider searchattribute.MapperProvider,
+	saValidator *searchattribute.Validator,
+) error {
+	if len(req.GetRequestId()) > maxIDLengthLimit {
+		return serviceerror.NewInvalidArgumentf("request ID exceeds length limit. Length=%d Limit=%d",
+			len(req.GetRequestId()), maxIDLengthLimit)
+	}
+
+	if len(req.GetIdentity()) > maxIDLengthLimit {
+		return serviceerror.NewInvalidArgumentf("identity exceeds length limit. Length=%d Limit=%d",
+			len(req.GetIdentity()), maxIDLengthLimit)
+	}
+
+	if err := normalizeAndValidateIDPolicy(req); err != nil {
+		return err
+	}
+
+	if err := validateBlobSize(
+		req.GetActivityId(),
+		"StartActivityExecution",
+		blobSizeLimitError,
+		blobSizeLimitWarn,
+		req.Input.Size(),
+		logger,
+		req.GetNamespace()); err != nil {
+		return serviceerror.NewInvalidArgument("input exceeds length limit")
+	}
+
+	if req.GetSearchAttributes() != nil {
+		if err := validateAndNormalizeSearchAttributes(req, saMapperProvider, saValidator); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func validateDescribeActivityExecutionRequest(
