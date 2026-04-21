@@ -1707,7 +1707,7 @@ func (n *Node) closeTransactionSerializeNodes() error {
 			prevData                *commonpb.DataBlob
 			prevVersionedTransition *persistencespb.VersionedTransition
 		)
-		skipIfUnchanged := node.shouldSkipIfUnchanged() && node.initialStatePersisted
+		skipIfUnchanged := node.shouldSkipIfUnchanged() && node.initialStatePersisted && len(node.newTasks[node.value]) == 0
 		if skipIfUnchanged {
 			prevData = node.serializedNode.Data
 			cloned, ok := proto.Clone(

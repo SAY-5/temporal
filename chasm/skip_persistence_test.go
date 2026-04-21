@@ -6,6 +6,7 @@ import (
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
+	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -118,6 +119,52 @@ func (s *nodeSuite) TestSkipPersistenceIfUnchanged_LoadedModified() {
 		secondMutation.UpdatedNodes[""].GetMetadata().GetLastUpdateVersionedTransition().GetTransitionCount(),
 		"LastUpdateVersionedTransition must be bumped for modified node",
 	)
+}
+
+func (s *nodeSuite) TestSkipPersistenceIfUnchanged_WithNewTask() {
+	s.nodeBackend.HandleNextTransitionCount = func() int64 { return 1 }
+	s.nodeBackend.HandleGetCurrentVersion = func() int64 { return 1 }
+
+	// ---- First transaction: create and persist. ----
+	rootNode := NewEmptyTree(s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger, s.metricsHandler)
+	rootComponent := &TestSkipIfUnchangedComponent{
+		Data: &persistencespb.WorkflowExecutionState{
+			RunId: "some-run-id",
+		},
+	}
+	s.NoError(rootNode.SetRootComponent(rootComponent))
+
+	firstMutation, err := rootNode.CloseTransaction()
+	s.NoError(err)
+	persistedNodes := common.CloneProtoMap(firstMutation.UpdatedNodes)
+
+	// ---- Second transaction: load, do NOT mutate data, but schedule a task. ----
+	s.nodeBackend.HandleNextTransitionCount = func() int64 { return 2 }
+	s.nodeBackend.HandleGetCurrentVersion = func() int64 { return 1 }
+
+	rootNode2, err := NewTreeFromDB(persistedNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger, s.metricsHandler)
+	s.NoError(err)
+
+	ctx := NewMutableContext(context.Background(), rootNode2)
+	component, err := rootNode2.Component(ctx, ComponentRef{})
+	s.NoError(err)
+
+	skipComponent := component.(*TestSkipIfUnchangedComponent)
+
+	// Data is unchanged, but schedule a side-effect task on this component.
+	s.testLibrary.mockSideEffectTaskHandler.EXPECT().
+		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).Times(1)
+	ctx.AddTask(skipComponent, TaskAttributes{}, &TestSideEffectTask{
+		Data: []byte("task-payload"),
+	})
+
+	secondMutation, err := rootNode2.CloseTransaction()
+	s.NoError(err)
+
+	// Despite unchanged data, the node must appear in UpdatedNodes so the task is persisted.
+	s.Contains(secondMutation.UpdatedNodes, "", "node with a new task must be in UpdatedNodes even if data is unchanged")
+	componentAttr := secondMutation.UpdatedNodes[""].GetMetadata().GetComponentAttributes()
+	s.Len(componentAttr.SideEffectTasks, 1, "side-effect task must be written to the persisted node")
 }
 
 func (s *nodeSuite) TestSkipPersistenceIfUnchanged_WithoutFlag() {
